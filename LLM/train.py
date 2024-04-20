@@ -40,7 +40,7 @@ class ClipCocoDataset(Dataset):
 
     def __getitem__(self, item: int) -> Tuple[torch.Tensor, ...]:
         tokens, mask = self.pad_tokens(item)
-        prefix = self.prefixes[self.caption2embedding[item]]
+        prefix = self.caption2embedding[item]
         if self.normalize_prefix:
             prefix = prefix.float()
             prefix = prefix / prefix.norm(2, -1)
@@ -57,22 +57,25 @@ class ClipCocoDataset(Dataset):
         sys.stdout.flush()
         self.prefixes = all_data["clip_embedding"]
         captions_raw = all_data["captions"]
-        self.image_ids = [caption["image_id"] for caption in captions_raw]
-        self.captions = [caption['caption'] for caption in captions_raw]
-        if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
-            with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
-                self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
-        else:
-            self.captions_tokens = []
-            self.caption2embedding = []
-            max_seq_len = 0
-            for caption in captions_raw:
-                self.captions_tokens.append(torch.tensor(self.tokenizer.encode(caption['caption']), dtype=torch.int64))
-                self.caption2embedding.append(caption["clip_embedding"])
-                max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
-            # self.max_seq_len = max_seq_len
-            with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
-                pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
+        #self.image_ids = [caption["image_id"] for caption in captions_raw]
+        self.captions = [caption for caption in captions_raw]
+        #if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
+        #    with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
+        #        self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
+        #else:
+        self.captions_tokens = []
+        self.caption2embedding = []
+        max_seq_len = 0
+        for i in range(len(captions_raw)):
+            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(captions_raw[i]), dtype=torch.int64))
+            self.caption2embedding.append(self.prefixes[i])
+            max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
+            if i % 1000 == 0:
+                print("iteration ", str(i))
+        # self.max_seq_len = max_seq_len
+        #with open(f"{data_path[:-4]}_tokens.pkl", 'wb') as f:
+        #    pickle.dump([self.captions_tokens, self.caption2embedding, max_seq_len], f)
+        #print("dumped pickle")
         all_len = torch.tensor([len(self.captions_tokens[i]) for i in range(len(self))]).float()
         self.max_seq_len = min(int(all_len.mean() + all_len.std() * 10), int(all_len.max()))
 
@@ -291,6 +294,7 @@ def load_model(config_path: str, epoch_or_latest: Union[str, int] = '_latest'):
 def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
           lr: float = 2e-5, warmup_steps: int = 5000, output_dir: str = ".", output_prefix: str = ""):
 
+    print("start training")
     device = torch.device('cuda:0')
     batch_size = args.bs
     epochs = args.epochs
@@ -298,8 +302,10 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
         os.makedirs(output_dir)
     model = model.to(device)
     model.train()
+    print("train model")
     optimizer = AdamW(model.parameters(), lr=lr)
     train_dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
+    print("init dataloader")
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=epochs * len(train_dataloader)
     )
@@ -307,6 +313,7 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     for epoch in range(epochs):
         print(f">>> Training epoch {epoch}")
         sys.stdout.flush()
+        print(model.state_dict().keys)
         progress = tqdm(total=len(train_dataloader), desc=output_prefix)
         for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
             model.zero_grad()
@@ -343,7 +350,7 @@ def main():
     parser.add_argument('--save_every', type=int, default=1)
     parser.add_argument('--prefix_length', type=int, default=10)
     parser.add_argument('--prefix_length_clip', type=int, default=10)
-    parser.add_argument('--bs', type=int, default=40)
+    parser.add_argument('--bs', type=int, default=10)
     parser.add_argument('--only_prefix', dest='only_prefix', action='store_true')
     parser.add_argument('--mapping_type', type=str, default='mlp', help='mlp/transformer')
     parser.add_argument('--num_layers', type=int, default=8)
@@ -354,6 +361,7 @@ def main():
     dataset = ClipCocoDataset(args.data, prefix_length, normalize_prefix=args.normalize_prefix)
     prefix_dim = 640 if args.is_rn else 512
     args.mapping_type = {'mlp': MappingType.MLP, 'transformer': MappingType.Transformer}[args.mapping_type]
+    print(args.only_prefix)
     if args.only_prefix:
         model = ClipCaptionPrefix(prefix_length, clip_length=args.prefix_length_clip, prefix_size=prefix_dim,
                                   num_layers=args.num_layers, mapping_type=args.mapping_type)
