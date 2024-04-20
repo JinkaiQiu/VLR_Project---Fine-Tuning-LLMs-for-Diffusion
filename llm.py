@@ -12,6 +12,7 @@ import skimage.io as io
 import PIL.Image
 from IPython.display import Image 
 from fashion_clip.fashion_clip import FashionCLIP
+from load_data import get_sample
 
 fclip = FashionCLIP('fashion-clip')
 
@@ -43,10 +44,6 @@ def get_device(device_id: int) -> D:
 
 
 CUDA = get_device
-
-current_directory = os.getcwd()
-save_path = os.path.join(current_directory, "saved_models")
-os.makedirs(save_path, exist_ok=True)
 #@title Model
 
 class MLP(nn.Module):
@@ -92,18 +89,6 @@ class ClipCaptionModel(nn.Module):
         else:
             self.clip_project = MLP((prefix_size, (self.gpt_embedding_size * prefix_length) // 2, self.gpt_embedding_size * prefix_length))
 
-
-class ClipCaptionPrefix(ClipCaptionModel):
-
-    def parameters(self, recurse: bool = True):
-        return self.clip_project.parameters()
-
-    def train(self, mode: bool = True):
-        super(ClipCaptionPrefix, self).train(mode)
-        self.gpt.eval()
-        return self
-
-#@title Caption prediction
 
 def generate_beam(model, tokenizer, beam_size: int = 5, prompt=None, embed=None,
                   entry_length=67, temperature=1., stop_token: str = '.'):
@@ -228,29 +213,36 @@ def generate2(
 
     return generated_list[0]
 
-device = 'cpu'
-model_path = os.path.join(save_path, 'fashion.pt')
-prefix_length = 10
-model = ClipCaptionModel(prefix_length)
-model.load_state_dict(torch.load(model_path, map_location=CPU)) 
-model = model.eval() 
-model = model.to(device)
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-
-def fashion_clip_process(pil_image, device='cpu'):
+if __name__ == "__main__":
+    current_directory = os.getcwd()
+    save_path = os.path.join(current_directory, "saved_models")
+    os.makedirs(save_path, exist_ok=True)
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    prefix_length = 10
+    
+    model = ClipCaptionModel(prefix_length)
+    model_path = os.path.join(save_path, 'fashion.pt')
+    model.load_state_dict(torch.load(model_path, map_location=CPU)) 
+    model = model.eval() 
+    model = model.to(device)
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+    
+    pil_image, row = get_sample()
+    
+    print(row['detail_desc'])
+    
     image_embeddings = fclip.encode_images([pil_image], batch_size=1)
     image_embeddings = image_embeddings / np.linalg.norm(image_embeddings, ord=2, axis=-1, keepdims=True)
     image_embeddings = torch.tensor(image_embeddings).to(device)
-    return image_embeddings
-
-def inference(pil_image, use_beam_search = False, device='cpu'):
-    image_embeddings = fashion_clip_process(pil_image, device)
-    with torch.no_grad():
-        prefix_embed = model.clip_project(image_embeddings).reshape(1, prefix_length, -1)
-
+        
+    prefix_embed = model.clip_project(image_embeddings).reshape(1, prefix_length, -1)
+    
+    use_beam_search = False
+    
     if use_beam_search:
         generated_text_prefix = generate_beam(model, tokenizer, embed=prefix_embed)[0]
     else:
         generated_text_prefix = generate2(model, tokenizer, embed=prefix_embed)
-    return generated_text_prefix
+        
+    print(generated_text_prefix)
