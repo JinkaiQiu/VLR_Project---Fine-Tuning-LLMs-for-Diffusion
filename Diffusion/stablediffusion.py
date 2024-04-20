@@ -9,10 +9,13 @@ class StableDiffusion(nn.Module):
         super().__init__()
         self.device = device
         self.vae = AutoencoderKL.from_pretrained("stabilityai/stable-diffusion-2-1", subfolder="vae", use_safetensors=True)
-        self.tokenizer = CLIPTokenizer.from_pretrained("stabilityai/stable-diffusion-2-1", subfolder="tokenizer")
-        self.text_encoder = CLIPTextModel.from_pretrained(
-            "stabilityai/stable-diffusion-2-1", subfolder="text_encoder", use_safetensors=True
-        )
+        #self.tokenizer = CLIPTokenizer.from_pretrained("stabilityai/stable-diffusion-2-1", subfolder="tokenizer")
+        self.tokenizer = CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
+        self.text_encoder = CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')
+
+        #self.text_encoder = CLIPTextModel.from_pretrained(
+        #    "stabilityai/stable-diffusion-2-1", subfolder="text_encoder", use_safetensors=True
+        #)
         self.unet = UNet2DConditionModel.from_pretrained(
             "stabilityai/stable-diffusion-2-1", subfolder="unet", use_safetensors=True
         )
