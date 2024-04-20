@@ -228,7 +228,7 @@ def generate2(
 
     return generated_list[0]
 
-device = 'cuda:0'
+device = 'cpu'
 model_path = os.path.join(save_path, 'fashion.pt')
 prefix_length = 10
 model = ClipCaptionModel(prefix_length)
@@ -238,13 +238,13 @@ model = model.to(device)
 tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
 
-def fashion_clip_process(pil_image, device='cuda:0'):
+def fashion_clip_process(pil_image, device='cpu'):
     image_embeddings = fclip.encode_images([pil_image], batch_size=1)
     image_embeddings = image_embeddings / np.linalg.norm(image_embeddings, ord=2, axis=-1, keepdims=True)
     image_embeddings = torch.tensor(image_embeddings).to(device)
     return image_embeddings
 
-def inference(pil_image, use_beam_search = False, device='cuda:0'):
+def inference(pil_image, use_beam_search = False, device='cpu'):
     image_embeddings = fashion_clip_process(pil_image, device)
     with torch.no_grad():
         prefix_embed = model.clip_project(image_embeddings).reshape(1, prefix_length, -1)
