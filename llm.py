@@ -13,6 +13,8 @@ import PIL.Image
 from IPython.display import Image 
 from fashion_clip.fashion_clip import FashionCLIP
 
+fclip = FashionCLIP('fashion-clip')
+
 
 N = type(None)
 V = np.array
@@ -43,9 +45,8 @@ def get_device(device_id: int) -> D:
 CUDA = get_device
 
 current_directory = os.getcwd()
-save_path = os.path.join(os.path.dirname(current_directory), "pretrained_models")
+save_path = os.path.join(current_directory, "saved_models")
 os.makedirs(save_path, exist_ok=True)
-
 #@title Model
 
 class MLP(nn.Module):
@@ -227,17 +228,29 @@ def generate2(
 
     return generated_list[0]
 
-def get_model(device):
-    #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-    #fclip = FashionCLIP('fashion-clip')
-    model_path = os.path.join(save_path, 'fashion.pt')
-    prefix_length = 10
+device = 'cuda:0'
+model_path = os.path.join(save_path, 'fashion.pt')
+prefix_length = 10
+model = ClipCaptionModel(prefix_length)
+model.load_state_dict(torch.load(model_path, map_location=CPU)) 
+model = model.eval() 
+model = model.to(device)
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
-    model = ClipCaptionModel(prefix_length)
 
-    model.load_state_dict(torch.load(model_path, map_location=CPU)) 
+def fashion_clip_process(pil_image, device='cuda:0'):
+    image_embeddings = fclip.encode_images([pil_image], batch_size=1)
+    image_embeddings = image_embeddings / np.linalg.norm(image_embeddings, ord=2, axis=-1, keepdims=True)
+    image_embeddings = torch.tensor(image_embeddings).to(device)
+    return image_embeddings
 
-    model = model.eval() 
-    model = model.to(device)
+def inference(pil_image, use_beam_search = False, device='cuda:0'):
+    image_embeddings = fashion_clip_process(pil_image, device)
+    with torch.no_grad():
+        prefix_embed = model.clip_project(image_embeddings).reshape(1, prefix_length, -1)
 
-    return model
+    if use_beam_search:
+        generated_text_prefix = generate_beam(model, tokenizer, embed=prefix_embed)[0]
+    else:
+        generated_text_prefix = generate2(model, tokenizer, embed=prefix_embed)
+    return generated_text_prefix
