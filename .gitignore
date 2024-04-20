@@ -2,3 +2,4 @@ Images/
 pretrained_models/
 fashion.pt
 __pycache__/
+.DS_Store
