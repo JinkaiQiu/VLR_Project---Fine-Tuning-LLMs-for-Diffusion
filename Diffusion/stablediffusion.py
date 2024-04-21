@@ -94,16 +94,16 @@ if __name__ == "__main__":
     prompt = ["A front view of of a organge T-shirt with a pure white background."]
     sd.requires_grad_(False) # Note: Running out of memory if require grad
 
-    output = sd.forward(prompt)
-    loss = nn.MSELoss()
-    target = torch.zeros_like(output)
-    loss = loss(output, target)
-    loss.backward()
-    # output  = (output.permute(1, 2, 0) * 255).to(torch.uint8).cpu().numpy()
-    # output = Image.fromarray(output)
-    # output.show()
+    output = sd.forward_from_prompt(prompt)
+    # loss = nn.MSELoss()
+    # target = torch.zeros_like(output)
+    # loss = loss(output, target)
+    # loss.backward()
+    output  = (output.permute(1, 2, 0) * 255).to(torch.uint8).cpu().numpy()
+    output = Image.fromarray(output)
+    output.save("test2.png")
 
-    # Check gradients
-    for name, param in sd.named_parameters():
-        if param.grad is not None:
-            print(f"Gradient for parameter {name}:")
+    # # Check gradients
+    # for name, param in sd.named_parameters():
+    #     if param.grad is not None:
+    #         print(f"Gradient for parameter {name}:")
