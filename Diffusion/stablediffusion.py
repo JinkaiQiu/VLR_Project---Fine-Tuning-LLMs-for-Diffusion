@@ -115,7 +115,8 @@ class StableDiffusion(nn.Module):
             latent_model_input = torch.cat([latents] * 2)
             latent_model_input = self.scheduler.scale_model_input(latent_model_input, timestep=t)
             # with torch.no_grad():
-            noise_pred = checkpoint(self.checkpointUnet, latent_model_input, t, text_embeddings)            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+            noise_pred = checkpoint(self.checkpointUnet, latent_model_input, t, text_embeddings)            
+            noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
             noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
         latents = 1 / 0.18215 * latents
