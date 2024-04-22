@@ -121,7 +121,7 @@ def map_prompt_to_clip(one_hot_gpt2):
     gpt2_vocab_size = len(gpt_tokenizer.get_vocab())
     clip_vocab_size = len(clip_tokenizer.get_vocab())
     transformation_matrix = create_sparse_transformation_matrix(tokens_gpt2, tokens_clip, a2b, gpt2_vocab_size, clip_vocab_size)
-    one_hot_gpt2 = get_gpt2_logits(prompt)
+    one_hot_gpt2 = one_hot_gpt2.cpu()
     one_hot_clip = convert_gpt2_to_clip_onehots(one_hot_gpt2, transformation_matrix)
     max_length = clip_tokenizer.model_max_length
     clip_vocab_size = len(clip_tokenizer.get_vocab())

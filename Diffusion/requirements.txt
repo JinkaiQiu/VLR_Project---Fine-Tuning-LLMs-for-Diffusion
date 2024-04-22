@@ -1,6 +1,0 @@
-torch
-numpy
-pillow
-diffusers
-transformers
-tqdm
