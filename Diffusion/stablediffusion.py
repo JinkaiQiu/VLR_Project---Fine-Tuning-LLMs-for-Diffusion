@@ -67,7 +67,8 @@ class StableDiffusion(nn.Module):
         max_length = text_input.input_ids.shape[-1]
         uncond_input = self.tokenizer([""] * batch_size, padding="max_length", max_length=max_length, return_tensors="pt")
         uncond_embeddings = self.text_encoder(uncond_input.input_ids.to(self.device))[0]
-        text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+        text_embeddings = torch.cat([uncond_embeddings, text_embeddings],dim=0)
+        print(text_embeddings.shape)
         # with torch.no_grad():
         latents = torch.randn(
             (batch_size, self.unet.config.in_channels, height // 8, width // 8),
@@ -94,8 +95,6 @@ class StableDiffusion(nn.Module):
         return image
     
     def forward(self, text_embeddings, height=512, width=512, num_inference_steps=25, guidance_scale=7.5, seed=0):
-        if text_embeddings.shape[0] != 2 or text_embeddings.shape[1] != 77 or text_embeddings.shape[2] != 1024:
-            raise ValueError("text_embeddings should be of shape (2, 77, 1024), where first half is uncond and second half is cond.")
         generator = torch.Generator(device=self.device).manual_seed(seed)
         batch_size = 1
         max_length = text_embeddings.shape[1]
@@ -128,18 +127,20 @@ class StableDiffusion(nn.Module):
 if __name__ == "__main__":
     sd = StableDiffusion()
     # em = Embedder()
-    prompt = ["A front view of of a organge T-shirt with a pure white background."]
+    prompt = ["A front view of of a organge T-shirt with a pure white background.", "A front view of of a blue T-shirt with a pure white background."]
     # sd.requires_grad_(False) # Note: Running out of memory if require grad
 
     output = sd.forward_from_prompt(prompt)
-    loss = nn.MSELoss()
-    target = torch.zeros_like(output)
-    target.requires_grad = True
-    loss = loss(output, target)
-    loss.backward()
+    # loss = nn.MSELoss()
+    # target = torch.zeros_like(output)
+    # target.requires_grad = True
+    # loss = loss(output, target)
+    # loss.backward()
     # output  = (output.permute(1, 2, 0) * 255).to(torch.uint8).cpu().numpy()
-    # output = Image.fromarray(output)
-    # output.save("test2.png")
+    for i in range(output.shape[0]):
+        image = Image.fromarray((output[i].permute(1, 2, 0) * 255).to(torch.uint8).cpu().numpy())
+        image.save(f"output_{i}.png")
+
 
     # Check who requires gradients
     # for name, param in sd.named_parameters():
