@@ -11,6 +11,7 @@ import sys
 import argparse
 import json
 from typing import Tuple, Optional, Union
+import pandas as pd
 
 
 class MappingType(Enum):
@@ -56,9 +57,11 @@ class ClipCocoDataset(Dataset):
         print("Data size is %0d" % len(all_data["clip_embedding"]))
         sys.stdout.flush()
         self.prefixes = all_data["clip_embedding"]
-        captions_raw = all_data["captions"]
-        #self.image_ids = [caption["image_id"] for caption in captions_raw]
-        self.captions = [caption for caption in captions_raw]
+        article_ids = all_data["captions"]
+        subset = pd.read_csv("subset_data.csv")
+        get_caption = lambda row: row["colour_group_name"] + " " + row["detail_desc"]
+        self.captions = [get_caption(subset.loc[subset['article_id'] == article_id]).iloc[0] for article_id in article_ids]
+        captions_raw = self.captions
         #if os.path.isfile(f"{data_path[:-4]}_tokens.pkl"):
         #    with open(f"{data_path[:-4]}_tokens.pkl", 'rb') as f:
         #        self.captions_tokens, self.caption2embedding, self.max_seq_len = pickle.load(f)
@@ -66,8 +69,11 @@ class ClipCocoDataset(Dataset):
         self.captions_tokens = []
         self.caption2embedding = []
         max_seq_len = 0
+        
+        self.eot_token = self.tokenizer.encode('<|endoftext|>')
         for i in range(len(captions_raw)):
-            self.captions_tokens.append(torch.tensor(self.tokenizer.encode(captions_raw[i]), dtype=torch.int64))
+            tokens = self.tokenizer.encode(captions_raw[i]) + self.eot_token
+            self.captions_tokens.append(torch.tensor(tokens, dtype=torch.int64))
             self.caption2embedding.append(self.prefixes[i])
             max_seq_len = max(max_seq_len, self.captions_tokens[-1].shape[0])
             if i % 1000 == 0:
@@ -312,8 +318,8 @@ def train(dataset: ClipCocoDataset, model: ClipCaptionModel, args,
     # save_config(args)
     for epoch in range(epochs):
         print(f">>> Training epoch {epoch}")
-        sys.stdout.flush()
         print(model.state_dict().keys)
+        sys.stdout.flush()
         progress = tqdm(total=len(train_dataloader), desc=output_prefix)
         for idx, (tokens, mask, prefix) in enumerate(train_dataloader):
             model.zero_grad()
@@ -346,8 +352,8 @@ def main():
     parser.add_argument('--data', default='./data/coco/oscar_split_train.pkl')
     parser.add_argument('--out_dir', default='./checkpoints')
     parser.add_argument('--prefix', default='coco_prefix', help='prefix for saved filenames')
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--save_every', type=int, default=1)
+    parser.add_argument('--epochs', type=int, default=1000)
+    parser.add_argument('--save_every', type=int, default=10)
     parser.add_argument('--prefix_length', type=int, default=10)
     parser.add_argument('--prefix_length_clip', type=int, default=10)
     parser.add_argument('--bs', type=int, default=10)

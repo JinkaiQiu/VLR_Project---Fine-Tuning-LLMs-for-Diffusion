@@ -1,13 +1,14 @@
 from PIL import Image
 import torch
 from transformers import CLIPTextModel, CLIPTokenizer
-from diffusers import AutoencoderKL, UNet2DConditionModel, PNDMScheduler
+from diffusers import AutoencoderKL, PNDMScheduler, UNet2DConditionModel
+from diffusers.loaders import LoraLoaderMixin
 from tqdm.auto import tqdm
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
 class Embedder(nn.Module):
-    def __init__(self, device='cuda', model_id = "stabilityai/stable-diffusion-2-1"):
+    def __init__(self, device='cuda', model_id = "runwayml/stable-diffusion-v1-5"):
         super().__init__()
         self.device = device
         self.tokenizer = CLIPTokenizer.from_pretrained(model_id, subfolder="tokenizer")
@@ -28,27 +29,32 @@ class Embedder(nn.Module):
         text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
         return text_embeddings
     
-class StableDiffusion(nn.Module):
-    def __init__(self, device='cuda', model_id = "stabilityai/stable-diffusion-2-1"):
+class StableDiffusion(nn.Module, LoraLoaderMixin):
+    def __init__(self, device='cuda', model_id = "runwayml/stable-diffusion-v1-5"):
         super().__init__()
         self.device = device
         self.vae = AutoencoderKL.from_pretrained(model_id, subfolder="vae")
         self.tokenizer = CLIPTokenizer.from_pretrained(model_id, subfolder="tokenizer")
         self.text_encoder = CLIPTextModel.from_pretrained(model_id,subfolder="text_encoder")
-        self.unet = UNet2DConditionModel.from_pretrained(
-            model_id, subfolder="unet"
-        )
+        self.unet = UNet2DConditionModel.from_pretrained(model_id, subfolder="unet").to(device)
         self.scheduler = PNDMScheduler.from_pretrained(model_id, subfolder="scheduler")
 
         self.vae.to(self.device)
         self.text_encoder.to(self.device)
         self.unet.to(self.device)
         
+        self.components = {
+            'unet': self.unet,
+            'vae': self.vae,
+            'text_encoder': self.text_encoder,
+            'scheduler': self.scheduler
+        }
+        
         for param in self.vae.parameters():
             param.requires_grad = False
         for param in self.unet.parameters():
             param.requires_grad = False
-
+    
     def checkpointUnet(self, latent_model_input, t, text_embeddings):
         return self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings).sample
     
@@ -125,8 +131,9 @@ class StableDiffusion(nn.Module):
         return image
 
 if __name__ == "__main__":
-    sd = StableDiffusion()
+    sd = StableDiffusion(model_id="runwayml/stable-diffusion-v1-5")
     # em = Embedder()
+    sd.load_lora_weights("full-lora/", "lora2")
     prompt = ["A front view of of a organge T-shirt with a pure white background.", "A front view of of a blue T-shirt with a pure white background."]
     # sd.requires_grad_(False) # Note: Running out of memory if require grad
 
